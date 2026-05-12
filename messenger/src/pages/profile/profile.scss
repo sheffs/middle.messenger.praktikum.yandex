@@ -1,0 +1,236 @@
+@use "@/styles/mixins" as *;
+
+.profile-page {
+  display: flex;
+  min-height: 100vh;
+  background: $bg-primary;
+
+  &__sidebar {
+    width: 80px;
+    flex-shrink: 0;
+    background: $bg-white;
+    border-right: 1px solid $border;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: $spacing-lg;
+  }
+
+  &__back {
+    @include flex-center;
+
+    width: 40px;
+    height: 40px;
+    border-radius: $radius-full;
+    color: $text-secondary;
+    transition: background $transition-fast, color $transition-fast;
+
+    @include focus-ring;
+
+    &:hover {
+      background: $bg-primary;
+      color: $primary;
+    }
+  }
+
+  &__content {
+    flex: 1;
+    max-width: 560px;
+    margin: 0 auto;
+    padding: $spacing-xl $spacing-md;
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-xl;
+  }
+
+  &__avatar-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: $spacing-md;
+  }
+
+  &__name {
+    font-size: $font-size-xl;
+    font-weight: 700;
+    color: $text-primary;
+  }
+
+  &__card {
+    background: $bg-white;
+    border-radius: $radius-xl;
+    box-shadow: $shadow-sm;
+    overflow: hidden;
+  }
+
+  &__section {
+    padding: $spacing-lg;
+  }
+
+  &__section-title {
+    font-size: $font-size-sm;
+    font-weight: 600;
+    color: $text-secondary;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: $spacing-md;
+  }
+
+  &__actions {
+    display: flex;
+    flex-direction: column;
+    background: $bg-white;
+    border-radius: $radius-xl;
+    box-shadow: $shadow-sm;
+    overflow: hidden;
+  }
+
+  &__action-link {
+    padding: $spacing-md $spacing-lg;
+    text-align: left;
+    font-size: $font-size-md;
+    color: $primary;
+    font-weight: 500;
+    border-bottom: 1px solid $border;
+    transition: background $transition-fast;
+
+    @include focus-ring;
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    &:hover {
+      background: $bg-primary;
+    }
+
+    &--danger {
+      color: $error;
+
+      &:hover {
+        background: rgb(239 68 68 / 6%);
+      }
+    }
+  }
+}
+
+// Profile data rows
+.profile-data {
+  &__row {
+    display: flex;
+    align-items: center;
+    padding: $spacing-sm 0;
+    border-bottom: 1px solid $border;
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+
+  &__label {
+    flex-basis: 160px;
+    font-size: $font-size-sm;
+    color: $text-secondary;
+    flex-shrink: 0;
+  }
+
+  &__value {
+    flex: 1;
+    font-size: $font-size-sm;
+    color: $text-primary;
+    font-weight: 500;
+  }
+}
+
+// Modal component
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: $spacing-md;
+
+  &[hidden] {
+    display: none;
+  }
+
+  &__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgb(0 0 0 / 50%);
+    backdrop-filter: blur(4px);
+  }
+
+  &__dialog {
+    position: relative;
+    width: 100%;
+    max-width: 440px;
+    max-height: calc(100vh - #{$spacing-xl * 2});
+    background: $bg-white;
+    border-radius: $radius-xl;
+    box-shadow: $shadow-lg;
+    display: flex;
+    flex-direction: column;
+    animation: modal-appear $transition-normal;
+  }
+
+  &__header {
+    @include flex-between;
+
+    flex-shrink: 0;
+    padding: $spacing-lg $spacing-lg $spacing-md;
+    border-bottom: 1px solid $border;
+  }
+
+  &__title {
+    font-size: $font-size-lg;
+    font-weight: 700;
+    color: $text-primary;
+  }
+
+  &__close {
+    @include flex-center;
+
+    width: 32px;
+    height: 32px;
+    border-radius: $radius-full;
+    font-size: $font-size-xl;
+    color: $text-secondary;
+    transition: background $transition-fast;
+
+    @include focus-ring;
+
+    &:hover {
+      background: $bg-primary;
+    }
+  }
+
+  &__form {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-md;
+    padding: $spacing-lg;
+    overflow-y: auto;
+
+    @include scrollbar-thin;
+  }
+
+  &__footer {
+    flex-shrink: 0;
+    margin-top: $spacing-sm;
+  }
+}
+
+@keyframes modal-appear {
+  from {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

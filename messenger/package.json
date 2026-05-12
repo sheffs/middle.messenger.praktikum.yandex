@@ -1,0 +1,48 @@
+{
+  "name": "middle.messenger.praktikum.yandex",
+  "version": "1.0.0",
+  "description": "Messenger SPA — Yandex Practicum middle module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "start": "npm run build && vite preview",
+    "preview": "vite preview",
+    "lint": "eslint src --ext .ts",
+    "lint:style": "stylelint \"src/**/*.scss\"",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.ts": [
+      "eslint --fix",
+      "eslint"
+    ],
+    "*.scss": [
+      "stylelint --fix",
+      "stylelint"
+    ]
+  },
+  "dependencies": {
+    "handlebars": "4.7.9"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "6.21.0",
+    "@typescript-eslint/parser": "6.21.0",
+    "@vitest/coverage-v8": "^4.1.6",
+    "eslint": "8.57.1",
+    "happy-dom": "^20.9.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "sass": "1.99.0",
+    "stylelint": "16.26.1",
+    "stylelint-config-standard-scss": "13.1.0",
+    "typescript": "5.9.3",
+    "vite": "5.4.21",
+    "vitest": "^4.1.6"
+  }
+}
