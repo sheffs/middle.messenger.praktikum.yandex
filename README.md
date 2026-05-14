@@ -2,7 +2,7 @@
 
 Учебный проект — SPA-мессенджер на TypeScript без готовых UI-фреймворков.
 
-Ссылка на проект: **добавить после деплоя в Netlify**
+Ссылка на проект: [messanger-test.netlify.app](https://messanger-test.netlify.app/)
 
 ---
 
