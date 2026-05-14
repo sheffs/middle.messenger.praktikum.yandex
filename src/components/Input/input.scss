@@ -1,0 +1,61 @@
+@use "@/styles/mixins" as *;
+
+.input-field {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+
+  &__label {
+    font-size: $font-size-sm;
+    font-weight: 600;
+    color: $text-primary;
+  }
+
+  &__input {
+    width: 100%;
+    padding: 12px $spacing-md;
+    border: 1.5px solid $border;
+    border-radius: $radius-md;
+    font-size: $font-size-md;
+    color: $text-primary;
+    background: $bg-white;
+    transition: border-color $transition-fast, box-shadow $transition-fast;
+
+    @include focus-ring;
+
+    &::placeholder {
+      color: $text-secondary;
+    }
+
+    &:focus {
+      outline: none;
+      border-color: $primary;
+      box-shadow: 0 0 0 3px rgb(78 106 255 / 15%);
+    }
+
+    &[readonly] {
+      background: $bg-primary;
+      cursor: default;
+
+      &:focus {
+        border-color: $border;
+        box-shadow: none;
+      }
+    }
+  }
+
+  &__error-text {
+    font-size: $font-size-xs;
+    color: $error;
+    min-height: 16px;
+    display: block;
+  }
+
+  &--error &__input {
+    border-color: $error;
+
+    &:focus {
+      box-shadow: 0 0 0 3px rgb(239 68 68 / 15%);
+    }
+  }
+}
