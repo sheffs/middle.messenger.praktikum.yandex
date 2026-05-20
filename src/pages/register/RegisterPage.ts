@@ -31,7 +31,7 @@ const template = `
         {{{ inputPhone }}}
         {{{ inputPassword }}}
         {{{ inputPasswordConfirm }}}
-        <p class="auth-page__form-error" id="register-error" hidden></p>
+        <p class="form-error" id="register-error" hidden></p>
         {{{ button }}}
       </form>
 
@@ -46,7 +46,7 @@ const template = `
 `;
 
 export class RegisterPage extends Block {
-  declare private _inputs: Record<string, Input>;
+  private _inputs!: Record<string, Input>;
 
   protected init(): void {
     const inputFirstName = new Input({ name: 'first_name', label: 'Имя', placeholder: 'Иван', validate: Validator.name });
@@ -90,15 +90,28 @@ export class RegisterPage extends Block {
 
     if (!isValid) {return;}
 
-    const { inputFirstName, inputSecondName, inputLogin, inputEmail, inputPhone, inputPassword } = this._inputs;
+    const { inputFirstName, inputSecondName, inputLogin, inputEmail, inputPhone, inputPassword, inputPasswordConfirm } = this._inputs;
 
-    AuthAPI.signup({
+    const formData = {
       first_name: inputFirstName.getValue(),
       second_name: inputSecondName.getValue(),
       login: inputLogin.getValue(),
       email: inputEmail.getValue(),
       phone: inputPhone.getValue(),
       password: inputPassword.getValue(),
+      password_confirm: inputPasswordConfirm.getValue(),
+    };
+
+    // eslint-disable-next-line no-console
+    console.log('Register form data:', formData);
+
+    AuthAPI.signup({
+      first_name: formData.first_name,
+      second_name: formData.second_name,
+      login: formData.login,
+      email: formData.email,
+      phone: formData.phone,
+      password: formData.password,
     })
       .then(() => AuthAPI.getUser())
       .then((user) => {

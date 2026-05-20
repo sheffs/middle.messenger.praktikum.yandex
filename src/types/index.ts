@@ -15,13 +15,17 @@ export interface LastMessage {
   content: string;
 }
 
-export interface Chat {
+// Данные чата из API
+interface ChatBase {
   id: number;
   title: string;
   avatar: string | null;
   unread_count: number;
   last_message: LastMessage | null;
-  // Локальные расширения (нет в API)
+}
+
+// Расширение с полями, которые хранятся локально (нет в реальном API)
+export interface Chat extends ChatBase {
   is_group?: boolean;
   members?: number[];
 }
@@ -50,22 +54,21 @@ export interface SigninData {
   password: string;
 }
 
-export interface SignupData {
+// Общие поля для форм регистрации и редактирования профиля
+interface UserFormBase {
   first_name: string;
   second_name: string;
   login: string;
   email: string;
   phone: string;
+}
+
+export interface SignupData extends UserFormBase {
   password: string;
 }
 
-export interface UpdateProfileData {
-  first_name: string;
-  second_name: string;
+export interface UpdateProfileData extends UserFormBase {
   display_name: string;
-  login: string;
-  email: string;
-  phone: string;
 }
 
 export interface UpdatePasswordData {

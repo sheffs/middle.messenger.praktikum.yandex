@@ -24,7 +24,7 @@ const template = `
       <form class="auth-page__form" id="login-form" novalidate>
         {{{ inputLogin }}}
         {{{ inputPassword }}}
-        <p class="auth-page__form-error" id="login-error" hidden></p>
+        <p class="form-error" id="login-error" hidden></p>
         {{{ button }}}
       </form>
 
@@ -39,8 +39,8 @@ const template = `
 `;
 
 export class LoginPage extends Block {
-  declare private _inputLogin: Input;
-  declare private _inputPassword: Input;
+  private _inputLogin!: Input;
+  private _inputPassword!: Input;
 
   protected init(): void {
     this._inputLogin = new Input({
@@ -105,6 +105,9 @@ export class LoginPage extends Block {
       login: this._inputLogin.getValue(),
       password: this._inputPassword.getValue(),
     };
+
+    // eslint-disable-next-line no-console
+    console.log('Login form data:', data);
 
     AuthAPI.signin(data)
       .then(() => AuthAPI.getUser())

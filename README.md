@@ -8,11 +8,11 @@
 
 ## Технологии
 
-- TypeScript 5 — строгая типизация
-- Vite 5 — сборщик
+- TypeScript 5 — строгая типизация (`strict`, `noImplicitAny`, `strictNullChecks`)
+- Vite 7 — сборщик и dev-сервер
 - Handlebars 4 — шаблонизатор
 - SCSS — стили по методологии BEM
-- ESLint + Stylelint — линтинг
+- ESLint + Stylelint — линтинг JS/TS и CSS
 - Vitest — юнит-тесты
 
 ## Запуск
@@ -30,13 +30,15 @@ npm run start
 
 Приложение работает полностью локально — данные хранятся в `localStorage` браузера. Серверный API не требуется.
 
-## Остальные команды
+## Команды
 
 | Команда | Что делает |
 |---------|-----------|
 | `npm run build` | Сборка в `dist/` |
-| `npm run lint` | Проверка TypeScript |
-| `npm run lint:style` | Проверка стилей |
+| `npm run lint` | ESLint + Stylelint (все проверки) |
+| `npm run lint:js` | Только ESLint |
+| `npm run lint:style` | Только Stylelint |
+| `npm run lint:fix` | Автоисправление ESLint + Stylelint |
 | `npm run test` | Юнит-тесты |
 | `npm run test:coverage` | Тесты с покрытием |
 
@@ -56,11 +58,23 @@ npm run start
 Собственная компонентная система без React/Vue:
 
 - **Block** — базовый класс компонентов, Handlebars-шаблоны, реактивные props через Proxy
-- **EventBus** — издатель/подписчик для lifecycle-событий
+- **EventBus** — издатель/подписчик для lifecycle-событий компонентов
 - **Router** — History API, guard-функции для защищённых маршрутов
-- **Store** — глобальное состояние с подпиской на изменения
+- **Store** — глобальное состояние (singleton) с подпиской на изменения
 
-Данные (пользователи, чаты, сообщения) хранятся в `localStorage`. Код разбит на слои: `api/`, `services/`, `core/`, `components/`, `pages/`.
+Данные (пользователи, чаты, сообщения) хранятся в `localStorage`. Код разбит на слои:
+
+```
+src/
+├── api/          — интерфейс к данным (фасад над сервисами)
+├── components/   — переиспользуемые UI-компоненты (Input, Button, Avatar)
+├── core/         — Block, EventBus, Router, HTTPTransport, WebSocketTransport
+├── pages/        — страницы приложения
+├── services/     — бизнес-логика и работа с localStorage
+├── store/        — глобальное состояние
+├── types/        — общие TypeScript-типы
+└── utils/        — валидация и утилиты
+```
 
 ## Деплой
 

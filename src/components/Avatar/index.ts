@@ -1,11 +1,11 @@
-import Block from "../../core/Block";
-import type { BlockProps } from "../../core/Block";
-import "./avatar.scss";
+import Block from '../../core/Block';
+import type { BlockProps } from '../../core/Block';
+import './avatar.scss';
 
 interface AvatarProps extends BlockProps {
   initials?: string;
   src?: string;
-  size?: "sm" | "md" | "lg" | "xl";
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   editable?: boolean;
   clickable?: boolean;
 }
@@ -36,7 +36,7 @@ const template = `
 
 export class Avatar extends Block<AvatarProps> {
   constructor(props: AvatarProps) {
-    super({ size: "md", ...props });
+    super({ size: 'md', ...props });
   }
 
   protected render(): string {

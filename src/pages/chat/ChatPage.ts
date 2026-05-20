@@ -123,10 +123,10 @@ function searchMsgItemHTML(chat: Chat, msg: ChatMessage, query: string): string 
 
 function memberItemHTML(user: User, canRemove: boolean): string {
   const name = escapeHtml(user.display_name ?? `${user.first_name} ${user.second_name}`);
-  const initials = escapeHtml(getInitials(`${user.first_name} ${user.second_name}`));
+  const fullName = `${user.first_name} ${user.second_name}`;
   return `
     <div class="member-item" data-user-id="${user.id}">
-      <div class="avatar avatar--sm">${avatarInner(user.avatar, `${user.first_name} ${user.second_name}`)}<span class="avatar__initials">${initials}</span></div>
+      <div class="avatar avatar--sm">${avatarInner(user.avatar, fullName)}</div>
       <div class="member-item__info">
         <span class="member-item__name">${name}</span>
         <span class="member-item__login">@${escapeHtml(user.login)}</span>
@@ -254,7 +254,11 @@ export class ChatPage extends Block {
     if (!list) { return; }
 
     if (chats.length === 0) {
-      list.innerHTML = '<li class="chat-page__loading">Нет чатов — создайте первый!</li>';
+      const emptyItem = document.createElement('li');
+      emptyItem.className = 'chat-page__loading';
+      emptyItem.textContent = 'Нет чатов — создайте первый!';
+      list.innerHTML = '';
+      list.appendChild(emptyItem);
       return;
     }
 
@@ -368,6 +372,7 @@ export class ChatPage extends Block {
           <div class="chat-page__input-wrap">
             <div class="chat-page__attach-preview" id="attach-preview" hidden></div>
             <textarea class="chat-page__message-input" id="message-input" name="message" placeholder="Сообщение..." rows="1" aria-label="Введите сообщение"></textarea>
+            <span class="chat-page__message-error" id="message-error" hidden>Сообщение не должно быть пустым</span>
           </div>
           <button class="chat-page__send-btn" id="send-btn" type="button" aria-label="Отправить">
             <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true">
@@ -481,7 +486,11 @@ export class ChatPage extends Block {
       }).slice(0, 5);
 
       if (found.length === 0) {
-        results.innerHTML = '<li class="info-panel__no-results">Не найдено</li>';
+        const noResults = document.createElement('li');
+        noResults.className = 'info-panel__no-results';
+        noResults.textContent = 'Не найдено';
+        results.innerHTML = '';
+        results.appendChild(noResults);
         return;
       }
 
@@ -530,12 +539,32 @@ export class ChatPage extends Block {
     const sendBtn = this.element.querySelector('#send-btn');
     const textarea = this.element.querySelector<HTMLTextAreaElement>('#message-input');
 
+    const messageErrorEl = this.element.querySelector<HTMLElement>('#message-error');
+
+    textarea?.addEventListener('blur', () => {
+      const isEmpty = !textarea.value.trim() && !this._pendingAttachment;
+      if (messageErrorEl) {
+        messageErrorEl.hidden = !isEmpty;
+      }
+    });
+
+    textarea?.addEventListener('focus', () => {
+      if (messageErrorEl) { messageErrorEl.hidden = true; }
+    });
+
     const send = (): void => {
       const text = textarea?.value.trim() ?? '';
-      if (!text && !this._pendingAttachment) { return; }
+      if (!text && !this._pendingAttachment) {
+        if (messageErrorEl) { messageErrorEl.hidden = false; }
+        return;
+      }
+      if (messageErrorEl) { messageErrorEl.hidden = true; }
 
       const user = Store.getInstance().getState().user;
       if (!user) { return; }
+
+      // eslint-disable-next-line no-console
+      console.log('Message form data:', { message: text });
 
       const msg = LocalMessagesService.addMessage(chatId, text, user.id, this._pendingAttachment ?? undefined);
       const preview = text || (this._pendingAttachment?.kind === 'video' ? '[видео]' : '[фото]');
@@ -693,7 +722,14 @@ export class ChatPage extends Block {
 
           const main = this.element.querySelector('#chat-main');
           if (main) {
-            main.innerHTML = '<div class="chat-page__empty"><p class="chat-page__empty-text">Выберите чат</p></div>';
+            const emptyText = document.createElement('p');
+            emptyText.className = 'chat-page__empty-text';
+            emptyText.textContent = 'Выберите чат';
+            const emptyWrapper = document.createElement('div');
+            emptyWrapper.className = 'chat-page__empty';
+            emptyWrapper.appendChild(emptyText);
+            main.innerHTML = '';
+            main.appendChild(emptyWrapper);
           }
         })
         .catch(() => { /* тихо */ });

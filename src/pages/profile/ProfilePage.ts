@@ -75,7 +75,7 @@ const template = `
         {{{ editSecondName }}}
         {{{ editDisplayName }}}
         {{{ editPhone }}}
-        <p class="auth-page__form-error" id="edit-error" hidden></p>
+        <p class="form-error" id="edit-error" hidden></p>
         <div class="modal__footer">{{{ editSubmitBtn }}}</div>
       </form>
     </div>
@@ -92,7 +92,7 @@ const template = `
         {{{ pwdOld }}}
         {{{ pwdNew }}}
         {{{ pwdConfirm }}}
-        <p class="auth-page__form-error" id="pwd-error" hidden></p>
+        <p class="form-error" id="pwd-error" hidden></p>
         <div class="modal__footer">{{{ pwdSubmitBtn }}}</div>
       </form>
     </div>
@@ -100,10 +100,10 @@ const template = `
 `;
 
 export class ProfilePage extends Block {
-  declare private _editInputs: Record<string, Input>;
-  declare private _pwdOld: Input;
-  declare private _pwdNew: Input;
-  declare private _pwdConfirm: Input;
+  private _editInputs!: Record<string, Input>;
+  private _pwdOld!: Input;
+  private _pwdNew!: Input;
+  private _pwdConfirm!: Input;
 
   protected init(): void {
     const user = Store.getInstance().getState().user;
@@ -222,6 +222,9 @@ export class ProfilePage extends Block {
         phone: this._editInputs.editPhone.getValue(),
       };
 
+      // eslint-disable-next-line no-console
+      console.log('Profile form data:', data);
+
       UsersAPI.updateProfile(data)
         .then((user) => {
           Store.getInstance().setState({ user });
@@ -245,10 +248,15 @@ export class ProfilePage extends Block {
       const isValid = [this._pwdOld, this._pwdNew, this._pwdConfirm].map((i) => i.validate()).every(Boolean);
       if (!isValid) {return;}
 
-      UsersAPI.updatePassword({
+      const pwdData = {
         oldPassword: this._pwdOld.getValue(),
         newPassword: this._pwdNew.getValue(),
-      })
+      };
+
+      // eslint-disable-next-line no-console
+      console.log('Password form data:', pwdData);
+
+      UsersAPI.updatePassword(pwdData)
         .then(() => {
           this.element.querySelector<HTMLElement>('#change-password-modal')?.setAttribute('hidden', '');
         })
