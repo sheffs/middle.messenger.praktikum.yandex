@@ -39,8 +39,8 @@ const template = `
 `;
 
 export class LoginPage extends Block {
-  private _inputLogin!: Input;
-  private _inputPassword!: Input;
+  private declare _inputLogin: Input;
+  private declare _inputPassword: Input;
 
   protected init(): void {
     this._inputLogin = new Input({
@@ -106,17 +106,14 @@ export class LoginPage extends Block {
       password: this._inputPassword.getValue(),
     };
 
-    // eslint-disable-next-line no-console
-    console.log('Login form data:', data);
-
     AuthAPI.signin(data)
       .then(() => AuthAPI.getUser())
       .then((user) => {
         Store.getInstance().setState({ user });
         Router.getInstance().navigate('/messenger');
       })
-      .catch((err: { reason?: string }) => {
-        this._setError(err?.reason ?? 'Неверный логин или пароль');
+      .catch((err: Error) => {
+        this._setError(err.message);
       });
   }
 

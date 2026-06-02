@@ -28,7 +28,8 @@ npm run dev
 npm run start
 ```
 
-Приложение работает полностью локально — данные хранятся в `localStorage` браузера. Серверный API не требуется.
+Приложение работает с реальным бэкендом — [`ya-praktikum.tech/api/v2`](https://ya-praktikum.tech/api/v2/swagger/).
+Для работы требуется активная сессия (вход или регистрация).
 
 ## Команды
 
@@ -53,6 +54,18 @@ npm run start
 | `*` | 404 |
 | `/500` | 500 |
 
+## API
+
+Все запросы идут на `https://ya-praktikum.tech/api/v2`. Сессия поддерживается через cookie `authCookie`.
+
+| Модуль | Методы |
+|--------|--------|
+| **AuthAPI** | `signIn`, `signUp`, `signOut`, `getUser` |
+| **ChatsAPI** | `getChats`, `createChat`, `deleteChat`, `getMembers`, `addUsers`, `removeUsers`, `updateAvatar`, `getNewMessagesCount`, `getChatToken` |
+| **UsersAPI** | `updateProfile`, `updateAvatar`, `updatePassword`, `searchUsers` |
+
+Сообщения передаются через **WebSocket** (`wss://ya-praktikum.tech/ws/chats/{userId}/{chatId}/{token}`): поддерживаются отправка текста, загрузка истории (offset-пагинация) и ping/pong.
+
 ## Архитектура
 
 Собственная компонентная система без React/Vue:
@@ -61,20 +74,33 @@ npm run start
 - **EventBus** — издатель/подписчик для lifecycle-событий компонентов
 - **Router** — History API, guard-функции для защищённых маршрутов
 - **Store** — глобальное состояние (singleton) с подпиской на изменения
-
-Данные (пользователи, чаты, сообщения) хранятся в `localStorage`. Код разбит на слои:
+- **HTTPTransport** — обёртка над XMLHttpRequest с поддержкой JSON и FormData
+- **WebSocketTransport** — обёртка над WebSocket с автоматическим ping
 
 ```
 src/
-├── api/          — интерфейс к данным (фасад над сервисами)
+├── api/          — методы для работы с REST API (Auth, Chats, Users)
 ├── components/   — переиспользуемые UI-компоненты (Input, Button, Avatar)
 ├── core/         — Block, EventBus, Router, HTTPTransport, WebSocketTransport
 ├── pages/        — страницы приложения
-├── services/     — бизнес-логика и работа с localStorage
-├── store/        — глобальное состояние
 ├── types/        — общие TypeScript-типы
-└── utils/        — валидация и утилиты
+└── utils/        — валидация, trim, утилиты
 ```
+
+## Утилиты
+
+- **`trim(str, chars?)`** — удаляет из начала и конца строки пробельные символы (по умолчанию) или заданный набор символов. Корректно обрабатывает `\xA0` (неразрывный пробел).
+- **`validator`** — набор валидаторов для полей форм (логин, email, пароль, телефон и др.)
+
+## Seed-скрипт
+
+Для заполнения тестовыми данными (чаты + история сообщений):
+
+```bash
+node scripts/seed.mjs <логин> <пароль>
+```
+
+Скрипт создаёт трёх тестовых пользователей и три чата с сообщениями от разных участников.
 
 ## Деплой
 

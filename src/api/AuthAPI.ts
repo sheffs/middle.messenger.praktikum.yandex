@@ -1,23 +1,22 @@
-import { LocalAuthService } from '../services/LocalAuthService';
+import HTTPTransport from '../core/HTTPTransport';
 import type { User, SigninData, SignupData } from '../types';
 
-// Интерфейс сохранён таким же, как был бы с реальным API —
-// в будущем достаточно просто поменять реализацию внутри
+const http = new HTTPTransport('/auth');
 
 export const AuthAPI = {
   signin(data: SigninData): Promise<void> {
-    return LocalAuthService.signin(data);
+    return http.post('/signin', { data });
   },
 
   signup(data: SignupData): Promise<{ id: number }> {
-    return LocalAuthService.signup(data);
+    return http.post('/signup', { data });
   },
 
   getUser(): Promise<User> {
-    return LocalAuthService.getUser();
+    return http.get('/user');
   },
 
   logout(): Promise<void> {
-    return LocalAuthService.logout();
+    return http.post('/logout');
   },
 };

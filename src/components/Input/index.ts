@@ -10,6 +10,7 @@ interface InputProps extends BlockProps {
   placeholder?: string;
   value?: string;
   error?: string;
+  hint?: string;
   validate?: ValidateRule;
   readonly?: boolean;
 }
@@ -26,6 +27,7 @@ const template = `
       {{#if value}}value="{{value}}"{{/if}}
       {{#if readonly}}readonly{{/if}}
     />
+    {{#if hint}}<span class="input-field__hint">{{hint}}</span>{{/if}}
     <span class="input-field__error-text"></span>
   </div>
 `;

@@ -15,19 +15,12 @@ export interface LastMessage {
   content: string;
 }
 
-// Данные чата из API
-interface ChatBase {
+export interface Chat {
   id: number;
   title: string;
   avatar: string | null;
   unread_count: number;
   last_message: LastMessage | null;
-}
-
-// Расширение с полями, которые хранятся локально (нет в реальном API)
-export interface Chat extends ChatBase {
-  is_group?: boolean;
-  members?: number[];
 }
 
 export interface Message {
@@ -74,6 +67,10 @@ export interface UpdateProfileData extends UserFormBase {
 export interface UpdatePasswordData {
   oldPassword: string;
   newPassword: string;
+}
+
+export interface ChatMember extends User {
+  role: 'admin' | 'regular';
 }
 
 export interface APIError {

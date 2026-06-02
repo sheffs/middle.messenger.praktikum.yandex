@@ -1,29 +1,26 @@
-import { LocalUsersService } from '../services/LocalUsersService';
+import HTTPTransport from '../core/HTTPTransport';
 import type { User, UpdateProfileData, UpdatePasswordData } from '../types';
+
+const http = new HTTPTransport('/user');
 
 export const UsersAPI = {
   updateProfile(data: UpdateProfileData): Promise<User> {
-    return LocalUsersService.updateProfile(data);
+    return http.put('/profile', { data });
   },
 
   updatePassword(data: UpdatePasswordData): Promise<void> {
-    return LocalUsersService.updatePassword(data.oldPassword, data.newPassword);
+    return http.put('/password', { data });
   },
 
   updateAvatar(formData: FormData): Promise<User> {
-    const file = formData.get('avatar');
-    if (!(file instanceof File)) {
-      return Promise.reject({ reason: 'Файл не найден' });
-    }
-    return LocalUsersService.updateAvatar(file);
+    return http.put('/profile/avatar', { data: formData });
   },
 
-  getUserById(_id: number): Promise<User> {
-    // Заглушка — локально другого пользователя не получить без сервера
-    return Promise.reject({ reason: 'Функция недоступна в offline-режиме' });
+  getUserById(id: number): Promise<User> {
+    return http.get(`/${id}`);
   },
 
   searchUsers(login: string): Promise<User[]> {
-    return LocalUsersService.searchUsers(login);
+    return http.post('/search', { data: { login } });
   },
 };

@@ -46,15 +46,15 @@ const template = `
 `;
 
 export class RegisterPage extends Block {
-  private _inputs!: Record<string, Input>;
+  private declare _inputs: Record<string, Input>;
 
   protected init(): void {
     const inputFirstName = new Input({ name: 'first_name', label: 'Имя', placeholder: 'Иван', validate: Validator.name });
     const inputSecondName = new Input({ name: 'second_name', label: 'Фамилия', placeholder: 'Иванов', validate: Validator.name });
-    const inputLogin = new Input({ name: 'login', label: 'Логин', placeholder: 'ivanivanov', validate: Validator.login });
+    const inputLogin = new Input({ name: 'login', label: 'Логин', placeholder: 'ivanivanov', hint: 'Юзернейм: только латиница, цифры, «-», «_» — не email', validate: Validator.login });
     const inputEmail = new Input({ name: 'email', label: 'Почта', type: 'email', placeholder: 'pochta@yandex.ru', validate: Validator.email });
     const inputPhone = new Input({ name: 'phone', label: 'Телефон', type: 'tel', placeholder: '+79991234567', validate: Validator.phone });
-    const inputPassword = new Input({ name: 'password', label: 'Пароль', type: 'password', placeholder: 'Не менее 8 символов', validate: Validator.password });
+    const inputPassword = new Input({ name: 'password', label: 'Пароль', type: 'password', placeholder: 'Не менее 8 символов', hint: 'Мин. 8 символов, заглавная буква и цифра', validate: Validator.password });
     // Валидируем через замыкание: читаем текущее значение inputPassword в момент вызова
     const inputPasswordConfirm = new Input({
       name: 'password_confirm',
@@ -102,9 +102,6 @@ export class RegisterPage extends Block {
       password_confirm: inputPasswordConfirm.getValue(),
     };
 
-    // eslint-disable-next-line no-console
-    console.log('Register form data:', formData);
-
     AuthAPI.signup({
       first_name: formData.first_name,
       second_name: formData.second_name,
@@ -118,8 +115,8 @@ export class RegisterPage extends Block {
         Store.getInstance().setState({ user });
         Router.getInstance().navigate('/messenger');
       })
-      .catch((err: { reason?: string }) => {
-        this._setError(err?.reason ?? 'Ошибка регистрации');
+      .catch((err: Error) => {
+        this._setError(err.message);
       });
   }
 

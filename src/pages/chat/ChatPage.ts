@@ -1,16 +1,27 @@
 import Block from '../../core/Block';
 import { Avatar } from '../../components/Avatar';
 import { ChatsAPI } from '../../api/ChatsAPI';
+import { UsersAPI } from '../../api/UsersAPI';
 import { LocalMessagesService } from '../../services/LocalMessagesService';
-import { getAllKnownUsers, getUserById } from '../../services/stubUsers';
 import Store from '../../store/Store';
 import Router from '../../core/Router';
-import type { Chat, User } from '../../types';
+import type { Chat, User, ChatMember } from '../../types';
 import WebSocketTransport from '../../core/WebSocketTransport';
 import type { ChatMessage } from '../../core/WebSocketTransport';
+import { UnauthorizedError } from '../../core/errors';
+import { Queue } from '../../utils/structures';
+import { mergeSort } from '../../utils/sort';
 import './chat.scss';
 
 // ─── Утилиты ────────────────────────────────────────────────────────────────
+
+const RESOURCE_BASE = 'https://ya-praktikum.tech/api/v2/resources';
+
+function resourceUrl(path: string | null): string | null {
+  if (!path) { return null; }
+  if (path.startsWith('data:') || path.startsWith('http')) { return path; }
+  return `${RESOURCE_BASE}${path}`;
+}
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -30,30 +41,16 @@ function getInitials(name: string): string {
 }
 
 function avatarInner(avatar: string | null, title: string): string {
-  return avatar
-    ? `<img class="avatar__img" src="${escapeHtml(avatar)}" alt="Аватар" />`
+  const src = resourceUrl(avatar);
+  return src
+    ? `<img class="avatar__img" src="${escapeHtml(src)}" alt="Аватар" />`
     : `<span class="avatar__initials">${escapeHtml(getInitials(title))}</span>`;
-}
-
-/** Экранирует текст и оборачивает совпадение с запросом в <mark> */
-function highlightText(text: string, query: string): string {
-  if (!query) {
-    return escapeHtml(text);
-  }
-  const idx = text.toLowerCase().indexOf(query.toLowerCase());
-  if (idx < 0) {
-    return escapeHtml(text);
-  }
-  const before = escapeHtml(text.slice(0, idx));
-  const match = escapeHtml(text.slice(idx, idx + query.length));
-  const after = escapeHtml(text.slice(idx + query.length));
-  return `${before}<mark class="search-highlight">${match}</mark>${after}`;
 }
 
 // ─── Шаблоны HTML ────────────────────────────────────────────────────────────
 
 function chatItemHTML(chat: Chat, isActive: boolean): string {
-  const label = chat.is_group ? `👥 ${escapeHtml(chat.title)}` : escapeHtml(chat.title);
+  const label = escapeHtml(chat.title);
   return `
     <li class="chat-item${isActive ? ' chat-item--active' : ''}" data-chat-id="${chat.id}" role="button" tabindex="0">
       <div class="avatar avatar--md">${avatarInner(chat.avatar, chat.title)}</div>
@@ -78,7 +75,6 @@ function messageHTML(msg: ChatMessage, meId: number): string {
   if (msg.attachment) {
     const { kind, src, name } = msg.attachment;
     if (kind === 'image') {
-      // Открываем в лайтбоксе, не в новой вкладке
       attachHtml = `<button class="message__attachment message__img-btn" data-src="${escapeHtml(src)}" aria-label="Открыть изображение">
         <img class="message__img" src="${escapeHtml(src)}" alt="${escapeHtml(name)}" />
       </button>`;
@@ -100,28 +96,7 @@ function messageHTML(msg: ChatMessage, meId: number): string {
     </div>`;
 }
 
-function searchMsgItemHTML(chat: Chat, msg: ChatMessage, query: string): string {
-  const preview = highlightText(
-    msg.content.length > 80 ? `${msg.content.slice(0, 80)}…` : msg.content,
-    query,
-  );
-  return `
-    <li class="chat-item search-result" data-chat-id="${chat.id}" data-msg-id="${msg.id}"
-        role="button" tabindex="0">
-      <div class="avatar avatar--md">${avatarInner(chat.avatar, chat.title)}</div>
-      <div class="chat-item__content">
-        <div class="chat-item__top">
-          <span class="chat-item__name">${escapeHtml(chat.title)}</span>
-          <span class="chat-item__time">${escapeHtml(formatTime(msg.time))}</span>
-        </div>
-        <div class="chat-item__bottom">
-          <span class="chat-item__message">${preview}</span>
-        </div>
-      </div>
-    </li>`;
-}
-
-function memberItemHTML(user: User, canRemove: boolean): string {
+function memberItemHTML(user: ChatMember | User, canRemove: boolean): string {
   const name = escapeHtml(user.display_name ?? `${user.first_name} ${user.second_name}`);
   const fullName = `${user.first_name} ${user.second_name}`;
   return `
@@ -193,9 +168,6 @@ const template = `
           <input class="input-field__input" id="chat-title" name="title" type="text" placeholder="Название чата" required/>
           <span class="input-field__error-text" id="chat-title-error"></span>
         </div>
-        <label class="chat-page__group-label">
-          <input type="checkbox" id="is-group-check" name="is_group" /> Групповой чат
-        </label>
         <div class="modal__footer">
           <button class="button button--primary button--full" type="submit">Создать</button>
         </div>
@@ -215,15 +187,17 @@ const template = `
 export class ChatPage extends Block {
   private _pendingAttachment: { src: string; name: string; kind: 'image' | 'video' } | null = null;
   private _ws: WebSocketTransport | null = null;
+  /** Очередь текстов сообщений, ожидающих отправки пока WS не подключён */
+  private _messageQueue: Queue<string> = new Queue();
 
   protected init(): void {
     const user = Store.getInstance().getState().user;
     const profileAvatar = new Avatar({
       initials: user ? `${user.first_name[0]}${user.second_name[0]}`.toUpperCase() : '??',
-      src: user?.avatar ?? undefined,
+      src: user?.avatar ? `${RESOURCE_BASE}${user.avatar}` : undefined,
       size: 'sm',
       clickable: true,
-      events: { click: (): void => Router.getInstance().navigate('/profile') },
+      events: { click: (): void => Router.getInstance().navigate('/settings') },
     });
     Object.assign(this.children, { profileAvatar });
   }
@@ -235,6 +209,11 @@ export class ChatPage extends Block {
     this.bindLightbox();
   }
 
+  private _onUnauthorized(): void {
+    Store.getInstance().setState({ user: null, chats: [], activeChat: null });
+    Router.getInstance().navigate('/');
+  }
+
   // ─── Список чатов ────────────────────────────────────────────────
 
   private loadChats(): void {
@@ -243,7 +222,8 @@ export class ChatPage extends Block {
         Store.getInstance().setState({ chats });
         this.renderChatList(chats);
       })
-      .catch(() => {
+      .catch((err: Error) => {
+        if (err instanceof UnauthorizedError) { this._onUnauthorized(); return; }
         const el = this.element.querySelector('#chat-list');
         if (el) { el.textContent = 'Не удалось загрузить чаты'; }
       });
@@ -263,7 +243,12 @@ export class ChatPage extends Block {
     }
 
     const activeId = Store.getInstance().getState().activeChat;
-    list.innerHTML = chats.map((c) => chatItemHTML(c, c.id === activeId)).join('');
+    const sorted = mergeSort(chats, (a, b) => {
+      const timeA = a.last_message?.time ? new Date(a.last_message.time).getTime() : 0;
+      const timeB = b.last_message?.time ? new Date(b.last_message.time).getTime() : 0;
+      return timeB - timeA;
+    });
+    list.innerHTML = sorted.map((c) => chatItemHTML(c, c.id === activeId)).join('');
     list.querySelectorAll('.chat-item').forEach((item) => {
       item.addEventListener('click', () => this.openChat(Number((item as HTMLElement).dataset.chatId)));
     });
@@ -286,13 +271,28 @@ export class ChatPage extends Block {
     main.innerHTML = this.buildActiveChatHTML(chat);
     this._pendingAttachment = null;
 
-    this.renderMessages(chatId);
+    this.renderMessages();
     this.bindSendMessage(chatId);
     this.bindDeleteChat(chatId);
     this.bindAttachButton();
     this.bindChatAvatarChange(chatId);
     this.bindInfoPanel(chatId);
     this._connectWs(chatId);
+    this._clearUnreadCount(chatId);
+  }
+
+  private _clearUnreadCount(chatId: number): void {
+    ChatsAPI.getNewMessagesCount(chatId)
+      .then(({ unread_count }) => {
+        if (unread_count === 0) {
+          const chats = Store.getInstance().getState().chats.map((c): Chat =>
+            c.id === chatId ? { ...c, unread_count: 0 } : c,
+          );
+          Store.getInstance().setState({ chats });
+          this.renderChatList(chats);
+        }
+      })
+      .catch(() => {});
   }
 
   private _connectWs(chatId: number): void {
@@ -301,42 +301,65 @@ export class ChatPage extends Block {
 
     this._ws?.disconnect();
     this._ws = null;
+    this._messageQueue.clear();
 
     ChatsAPI.getChatToken(chatId)
       .then(({ token }) => {
         const ws = new WebSocketTransport(user.id, chatId, token);
+        ws.on('open', () => this._drainQueue());
         ws.on('message', (data) => this._handleWsMessage(data, chatId));
         ws.connect();
         this._ws = ws;
       })
-      .catch(() => { /* local-only mode: WS недоступен, продолжаем локально */ });
+      .catch((err: Error) => {
+        if (err instanceof UnauthorizedError) { this._onUnauthorized(); return; }
+        const container = this.element.querySelector('#messages-container');
+        if (container) {
+          container.innerHTML = `<p class="chat-page__loading">Не удалось подключиться к чату: ${escapeHtml(err.message)}</p>`;
+        }
+      });
+  }
+
+  /** Отправляет накопленные сообщения из очереди после восстановления соединения */
+  private _drainQueue(): void {
+    while (!this._messageQueue.isEmpty()) {
+      const text = this._messageQueue.dequeue();
+      if (text && this._ws?.isOpen()) {
+        this._ws.sendMessage(text);
+      }
+    }
   }
 
   private _handleWsMessage(data: unknown, chatId: number): void {
-    // Массив приходит в ответ на "get old" — пропускаем, сообщения уже загружены локально
-    if (Array.isArray(data)) { return; }
     if (Store.getInstance().getState().activeChat !== chatId) { return; }
-
-    const msg = data as ChatMessage;
-    if (msg.type !== 'message') { return; }
 
     const user = Store.getInstance().getState().user;
     if (!user) { return; }
-    // Собственные сообщения уже добавлены локально при отправке
-    if (msg.user_id === user.id) { return; }
 
     const container = this.element.querySelector('#messages-container');
     if (!container) { return; }
+
+    if (Array.isArray(data)) {
+      const messages = (data as ChatMessage[]).slice().reverse();
+      if (messages.length === 0) {
+        container.innerHTML = '<p class="chat-page__loading">Нет сообщений — напишите первым!</p>';
+      } else {
+        container.innerHTML = messages.map((m) => messageHTML(m, user.id)).join('');
+        container.scrollTop = container.scrollHeight;
+      }
+      return;
+    }
+
+    const msg = data as ChatMessage;
+    if (msg.type !== 'message') { return; }
+    // Собственные сообщения уже добавлены оптимистично при отправке
+    if (msg.user_id === user.id) { return; }
 
     container.insertAdjacentHTML('beforeend', messageHTML(msg, user.id));
     container.scrollTop = container.scrollHeight;
   }
 
   private buildActiveChatHTML(chat: Chat): string {
-    const typeLabel = chat.is_group
-      ? `👥 Группа · ${(chat.members?.length ?? 0)} уч.`
-      : 'Личный чат';
-
     return `
       <div class="chat-page__conversation">
         <header class="chat-page__chat-header">
@@ -350,7 +373,6 @@ export class ChatPage extends Block {
           </div>
           <button class="chat-page__chat-info-btn" id="toggle-info-btn" type="button" aria-expanded="false" aria-controls="info-panel">
             <span class="chat-page__chat-name">${escapeHtml(chat.title)}</span>
-            <span class="chat-page__chat-subtitle">${typeLabel}</span>
           </button>
           <div class="chat-page__chat-actions">
             <button class="chat-page__action-btn chat-page__action-btn--danger" id="delete-chat-btn" type="button" aria-label="Удалить чат">
@@ -361,7 +383,9 @@ export class ChatPage extends Block {
           </div>
         </header>
 
-        <div class="chat-page__messages" id="messages-container" role="log" aria-live="polite"></div>
+        <div class="chat-page__messages" id="messages-container" role="log" aria-live="polite">
+          <p class="chat-page__loading">Загрузка сообщений...</p>
+        </div>
 
         <div class="chat-page__input-area">
           <button class="chat-page__input-btn" id="attach-btn" type="button" aria-label="Прикрепить файл">
@@ -385,6 +409,15 @@ export class ChatPage extends Block {
       <aside class="chat-page__info-panel" id="info-panel" aria-label="Информация о чате" hidden>
         <div class="info-panel__content" id="info-panel-content"></div>
       </aside>`;
+  }
+
+  // ─── Сообщения (загружаются через WebSocket) ─────────────────────
+
+  private renderMessages(): void {
+    const container = this.element.querySelector('#messages-container');
+    if (container) {
+      container.innerHTML = '<p class="chat-page__loading">Загрузка сообщений...</p>';
+    }
   }
 
   // ─── Панель информации ───────────────────────────────────────────
@@ -413,139 +446,129 @@ export class ChatPage extends Block {
     const chat = Store.getInstance().getState().chats.find((c) => c.id === chatId);
     if (!chat) { return; }
 
-    const meId = Store.getInstance().getState().user?.id ?? 0;
-    const memberIds = ChatsAPI.getMembers(chatId);
-    const members = memberIds.map((id) => getUserById(id)).filter((u): u is User => u !== undefined);
+    content.innerHTML = '<p class="chat-page__loading">Загрузка участников...</p>';
 
-    const membersHTML = members.map((u) => memberItemHTML(u, u.id !== meId)).join('');
+    ChatsAPI.getMembers(chatId)
+      .then((members) => {
+        const meId = Store.getInstance().getState().user?.id ?? 0;
+        const membersHTML = members.map((u) => memberItemHTML(u, u.id !== meId)).join('');
+        const avatarHtml = avatarInner(chat.avatar, chat.title);
 
-    const avatarHtml = avatarInner(chat.avatar, chat.title);
+        content.innerHTML = `
+          <div class="info-panel__header">
+            <div class="avatar avatar--lg info-panel__avatar">${avatarHtml}</div>
+            <h3 class="info-panel__title">${escapeHtml(chat.title)}</h3>
+            <p class="info-panel__subtitle">${members.length} участн.</p>
+          </div>
 
-    content.innerHTML = `
-      <div class="info-panel__header">
-        <div class="avatar avatar--lg info-panel__avatar">${avatarHtml}</div>
-        <h3 class="info-panel__title">${escapeHtml(chat.title)}</h3>
-        <p class="info-panel__subtitle">${chat.is_group ? `Группа · ${members.length} участн.` : 'Личный чат'}</p>
-      </div>
+          <div class="info-panel__section">
+            <h4 class="info-panel__section-title">Участники</h4>
+            <div class="info-panel__members" id="members-list">
+              ${membersHTML}
+            </div>
+          </div>
 
-      <div class="info-panel__section">
-        <h4 class="info-panel__section-title">Участники</h4>
-        <div class="info-panel__members" id="members-list">
-          ${membersHTML}
-        </div>
-      </div>
+          <div class="info-panel__section">
+            <h4 class="info-panel__section-title">Добавить участника</h4>
+            <div class="input-field">
+              <input class="input-field__input" id="user-search-input" type="text"
+                     placeholder="Логин пользователя..." aria-label="Поиск пользователя"/>
+            </div>
+            <ul class="info-panel__search-results" id="user-search-results"></ul>
+          </div>
+        `;
 
-      ${chat.is_group ? `
-      <div class="info-panel__section">
-        <h4 class="info-panel__section-title">Добавить участника</h4>
-        <div class="input-field">
-          <input class="input-field__input" id="user-search-input" type="text"
-                 placeholder="Имя или логин..." aria-label="Поиск пользователя"/>
-        </div>
-        <ul class="info-panel__search-results" id="user-search-results"></ul>
-      </div>` : ''}
-    `;
-
-    this.bindMemberRemove(chatId);
-    if (chat.is_group) {
-      this.bindUserSearch(chatId, meId);
-    }
+        this.bindMemberRemove(chatId);
+        this.bindUserSearch(chatId);
+      })
+      .catch((err: Error) => {
+        if (err instanceof UnauthorizedError) { this._onUnauthorized(); return; }
+        content.innerHTML = '<p class="chat-page__loading">Ошибка загрузки участников</p>';
+      });
   }
 
   private bindMemberRemove(chatId: number): void {
     this.element.querySelectorAll('.member-item__remove').forEach((btn) => {
       btn.addEventListener('click', () => {
         const userId = Number((btn as HTMLElement).dataset.userId);
-        ChatsAPI.removeMember(chatId, userId);
-
-        const chats = Store.getInstance().getState().chats.map((c): Chat => {
-          if (c.id !== chatId) { return c; }
-          return { ...c, members: (c.members ?? []).filter((id) => id !== userId) };
-        });
-        Store.getInstance().setState({ chats });
-        this.renderChatList(chats);
-        this.renderInfoPanel(chatId);
+        ChatsAPI.removeUsers({ users: [userId], chatId })
+          .then(() => ChatsAPI.getChats())
+          .then((chats) => {
+            Store.getInstance().setState({ chats });
+            this.renderChatList(chats);
+            this.renderInfoPanel(chatId);
+          })
+          .catch((err: Error) => {
+            if (err instanceof UnauthorizedError) { this._onUnauthorized(); return; }
+            this.renderInfoPanel(chatId);
+          });
       });
     });
   }
 
-  private bindUserSearch(chatId: number, meId: number): void {
+  private bindUserSearch(chatId: number): void {
     const input = this.element.querySelector<HTMLInputElement>('#user-search-input');
     const results = this.element.querySelector('#user-search-results');
     if (!input || !results) { return; }
 
     input.addEventListener('input', () => {
-      const query = input.value.toLowerCase().trim();
+      const query = input.value.trim();
       if (!query) { results.innerHTML = ''; return; }
 
-      const currentMembers = ChatsAPI.getMembers(chatId);
-      const found = getAllKnownUsers(meId).filter((u) => {
-        const inChat = currentMembers.includes(u.id);
-        const fullName = `${u.first_name} ${u.second_name} ${u.login}`.toLowerCase();
-        return !inChat && fullName.includes(query);
-      }).slice(0, 5);
+      Promise.all([
+        UsersAPI.searchUsers(query),
+        ChatsAPI.getMembers(chatId),
+      ])
+        .then(([users, members]) => {
+          const memberIds = new Set(members.map((m) => m.id));
+          const found = users.filter((u) => !memberIds.has(u.id)).slice(0, 5);
 
-      if (found.length === 0) {
-        const noResults = document.createElement('li');
-        noResults.className = 'info-panel__no-results';
-        noResults.textContent = 'Не найдено';
-        results.innerHTML = '';
-        results.appendChild(noResults);
-        return;
-      }
+          if (found.length === 0) {
+            results.innerHTML = '<li class="info-panel__no-results">Не найдено</li>';
+            return;
+          }
 
-      results.innerHTML = found.map((u) => {
-        const name = escapeHtml(u.display_name ?? `${u.first_name} ${u.second_name}`);
-        return `<li class="info-panel__search-item" data-user-id="${u.id}">
-          <span>${name} <span class="info-panel__login">@${escapeHtml(u.login)}</span></span>
-          <button class="info-panel__add-btn" type="button" data-user-id="${u.id}">+ Добавить</button>
-        </li>`;
-      }).join('');
+          results.innerHTML = found.map((u) => {
+            const name = escapeHtml(u.display_name ?? `${u.first_name} ${u.second_name}`);
+            return `<li class="info-panel__search-item" data-user-id="${u.id}">
+              <span>${name} <span class="info-panel__login">@${escapeHtml(u.login)}</span></span>
+              <button class="info-panel__add-btn" type="button" data-user-id="${u.id}">+ Добавить</button>
+            </li>`;
+          }).join('');
 
-      results.querySelectorAll('.info-panel__add-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const userId = Number((btn as HTMLElement).dataset.userId);
-          ChatsAPI.addMember(chatId, userId);
-
-          const chats = Store.getInstance().getState().chats.map((c): Chat => {
-            if (c.id !== chatId) { return c; }
-            return { ...c, members: [...(c.members ?? []), userId] };
+          results.querySelectorAll('.info-panel__add-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              const userId = Number((btn as HTMLElement).dataset.userId);
+              ChatsAPI.addUsers({ users: [userId], chatId })
+                .then(() => {
+                  input.value = '';
+                  results.innerHTML = '';
+                  this.renderInfoPanel(chatId);
+                })
+                .catch((err: Error) => {
+                  if (err instanceof UnauthorizedError) { this._onUnauthorized(); return; }
+                  results.innerHTML = '<li class="info-panel__no-results">Ошибка добавления участника</li>';
+                });
+            });
           });
-          Store.getInstance().setState({ chats });
-          this.renderChatList(chats);
-
-          input.value = '';
-          results.innerHTML = '';
-          this.renderInfoPanel(chatId);
+        })
+        .catch((err: Error) => {
+          if (err instanceof UnauthorizedError) { this._onUnauthorized(); return; }
+          results.innerHTML = '<li class="info-panel__no-results">Ошибка поиска</li>';
         });
-      });
     });
   }
 
-  // ─── Сообщения ───────────────────────────────────────────────────
-
-  private renderMessages(chatId: number): void {
-    const container = this.element.querySelector('#messages-container');
-    if (!container) { return; }
-    const user = Store.getInstance().getState().user;
-    if (!user) { return; }
-
-    const msgs = LocalMessagesService.getMessages(chatId);
-    container.innerHTML = msgs.map((m) => messageHTML(m, user.id)).join('');
-    container.scrollTop = container.scrollHeight;
-  }
+  // ─── Отправка сообщений ──────────────────────────────────────────
 
   private bindSendMessage(chatId: number): void {
     const sendBtn = this.element.querySelector('#send-btn');
     const textarea = this.element.querySelector<HTMLTextAreaElement>('#message-input');
-
     const messageErrorEl = this.element.querySelector<HTMLElement>('#message-error');
 
     textarea?.addEventListener('blur', () => {
       const isEmpty = !textarea.value.trim() && !this._pendingAttachment;
-      if (messageErrorEl) {
-        messageErrorEl.hidden = !isEmpty;
-      }
+      if (messageErrorEl) { messageErrorEl.hidden = !isEmpty; }
     });
 
     textarea?.addEventListener('focus', () => {
@@ -563,15 +586,24 @@ export class ChatPage extends Block {
       const user = Store.getInstance().getState().user;
       if (!user) { return; }
 
-      // eslint-disable-next-line no-console
-      console.log('Message form data:', { message: text });
+      // Оптимистичный рендер сообщения
+      const msg: ChatMessage = {
+        id: Date.now(),
+        user_id: user.id,
+        chat_id: chatId,
+        type: 'message',
+        time: new Date().toISOString(),
+        content: text,
+        is_read: false,
+        attachment: this._pendingAttachment ?? undefined,
+      };
 
-      const msg = LocalMessagesService.addMessage(chatId, text, user.id, this._pendingAttachment ?? undefined);
-      const preview = text || (this._pendingAttachment?.kind === 'video' ? '[видео]' : '[фото]');
-      ChatsAPI.updateLastMessage(chatId, preview, user);
-
-      if (text && this._ws?.isOpen()) {
-        this._ws.sendMessage(text);
+      if (text) {
+        if (this._ws?.isOpen()) {
+          this._ws.sendMessage(text);
+        } else {
+          this._messageQueue.enqueue(text);
+        }
       }
 
       this._pendingAttachment = null;
@@ -579,10 +611,12 @@ export class ChatPage extends Block {
 
       const container = this.element.querySelector('#messages-container');
       if (container) {
+        container.querySelector('.chat-page__loading')?.remove();
         container.insertAdjacentHTML('beforeend', messageHTML(msg, user.id));
         container.scrollTop = container.scrollHeight;
       }
 
+      const preview = text || (msg.attachment?.kind === 'video' ? '[видео]' : '[фото]');
       const chats = Store.getInstance().getState().chats.map((c): Chat =>
         c.id === chatId ? { ...c, last_message: { user, time: msg.time, content: preview } } : c,
       );
@@ -665,7 +699,6 @@ export class ChatPage extends Block {
       if (e.key === 'Escape' && lightbox && !lightbox.hasAttribute('hidden')) { close(); }
     });
 
-    // Делегирование — ловим клики на кнопках с data-src
     this.element.addEventListener('click', (e: MouseEvent) => {
       const btn = (e.target as Element).closest<HTMLElement>('.message__img-btn');
       if (!btn || !lightbox || !lightboxImg) { return; }
@@ -691,19 +724,28 @@ export class ChatPage extends Block {
       const file = fileInput.files?.[0];
       if (!file) { return; }
 
-      LocalMessagesService.fileToAttachment(file)
-        .then((att) => {
-          ChatsAPI.updateChatAvatar(chatId, att.src);
+      const formData = new FormData();
+      formData.append('chatId', String(chatId));
+      formData.append('avatar', file);
+
+      ChatsAPI.updateAvatar(formData)
+        .then((updatedChat) => {
           const chats = Store.getInstance().getState().chats.map((c): Chat =>
-            c.id === chatId ? { ...c, avatar: att.src } : c,
+            c.id === chatId ? { ...c, avatar: updatedChat.avatar } : c,
           );
           Store.getInstance().setState({ chats });
           this.renderChatList(chats);
 
           const el = this.element.querySelector('#chat-avatar-el');
-          if (el) { el.innerHTML = `<img class="avatar__img" src="${escapeHtml(att.src)}" alt="Аватар чата" />`; }
+          if (el) {
+            const chat = chats.find((c) => c.id === chatId);
+            el.innerHTML = avatarInner(updatedChat.avatar, chat?.title ?? '');
+          }
         })
-        .catch((err: Error) => alert(err.message));
+        .catch((err: Error) => {
+          if (err instanceof UnauthorizedError) { this._onUnauthorized(); return; }
+          alert(err.message);
+        });
 
       fileInput.value = '';
     });
@@ -719,20 +761,25 @@ export class ChatPage extends Block {
           const chats = Store.getInstance().getState().chats.filter((c) => c.id !== chatId);
           Store.getInstance().setState({ chats, activeChat: null });
           this.renderChatList(chats);
+          this._ws?.disconnect();
+          this._ws = null;
 
           const main = this.element.querySelector('#chat-main');
           if (main) {
-            const emptyText = document.createElement('p');
-            emptyText.className = 'chat-page__empty-text';
-            emptyText.textContent = 'Выберите чат';
             const emptyWrapper = document.createElement('div');
             emptyWrapper.className = 'chat-page__empty';
-            emptyWrapper.appendChild(emptyText);
+            emptyWrapper.innerHTML = '<p class="chat-page__empty-text">Выберите чат</p>';
             main.innerHTML = '';
             main.appendChild(emptyWrapper);
           }
         })
-        .catch(() => { /* тихо */ });
+        .catch((err: Error) => {
+          if (err instanceof UnauthorizedError) { this._onUnauthorized(); return; }
+          const main = this.element.querySelector('#chat-main');
+          if (main) {
+            main.innerHTML = `<p class="chat-page__empty-text">${escapeHtml(err.message)}</p>`;
+          }
+        });
     });
   }
 
@@ -750,7 +797,6 @@ export class ChatPage extends Block {
       ?.addEventListener('submit', (e: Event) => {
         e.preventDefault();
         const titleInput = this.element.querySelector<HTMLInputElement>('#chat-title');
-        const isGroupCheck = this.element.querySelector<HTMLInputElement>('#is-group-check');
         const errorEl = this.element.querySelector('#chat-title-error');
         const title = titleInput?.value.trim() ?? '';
 
@@ -759,24 +805,23 @@ export class ChatPage extends Block {
           return;
         }
 
-        const meId = Store.getInstance().getState().user?.id;
-        const members = meId ? [meId] : [];
-
-        ChatsAPI.createChat({ title, isGroup: isGroupCheck?.checked, members })
-          .then(() => ChatsAPI.getChats())
-          .then((chats) => {
+        ChatsAPI.createChat({ title })
+          .then(({ id }) => ChatsAPI.getChats().then((chats) => ({ chats, newId: id })))
+          .then(({ chats, newId }) => {
             Store.getInstance().setState({ chats });
             this.renderChatList(chats);
             close();
             if (titleInput) { titleInput.value = ''; }
+            this.openChat(newId);
           })
-          .catch(() => {
-            if (errorEl) { errorEl.textContent = 'Не удалось создать чат'; }
+          .catch((err: Error) => {
+            if (err instanceof UnauthorizedError) { this._onUnauthorized(); return; }
+            if (errorEl) { errorEl.textContent = err.message; }
           });
       });
   }
 
-  // ─── Поиск по всем чатам и сообщениям ──────────────────────────
+  // ─── Поиск по чатам ─────────────────────────────────────────────
 
   private bindSearch(): void {
     const input = this.element.querySelector<HTMLInputElement>('#chat-search');
@@ -793,80 +838,28 @@ export class ChatPage extends Block {
   private performSearch(rawQuery: string): void {
     const query = rawQuery.toLowerCase();
     const chats = Store.getInstance().getState().chats;
-
     const chatMatches = chats.filter((c) => c.title.toLowerCase().includes(query));
-
-    const msgResults: Array<{ chat: Chat; message: ChatMessage }> = [];
-    for (const chat of chats) {
-      for (const msg of LocalMessagesService.getMessages(chat.id)) {
-        if (msg.content.toLowerCase().includes(query)) {
-          msgResults.push({ chat, message: msg });
-        }
-      }
-    }
-
-    this.renderSearchResults(rawQuery, chatMatches, msgResults);
+    this.renderSearchResults(rawQuery, chatMatches);
   }
 
-  private renderSearchResults(
-    query: string,
-    chatMatches: Chat[],
-    msgResults: Array<{ chat: Chat; message: ChatMessage }>,
-  ): void {
+  private renderSearchResults(query: string, chatMatches: Chat[]): void {
     const list = this.element.querySelector('#chat-list');
-    if (!list) {
-      return;
-    }
+    if (!list) { return; }
 
     const activeId = Store.getInstance().getState().activeChat;
     let html = '';
 
     if (chatMatches.length > 0) {
-      html += '<li class="search-section-title">Чаты</li>';
       html += chatMatches.map((c) => chatItemHTML(c, c.id === activeId)).join('');
-    }
-
-    if (msgResults.length > 0) {
-      html += '<li class="search-section-title">Сообщения</li>';
-      html += msgResults
-        .slice(0, 25)
-        .map(({ chat, message }) => searchMsgItemHTML(chat, message, query))
-        .join('');
-    }
-
-    if (!html) {
+    } else {
       html = `<li class="chat-page__loading">По запросу «${escapeHtml(query)}» ничего не найдено</li>`;
     }
 
     list.innerHTML = html;
-
-    list.querySelectorAll('.chat-item:not(.search-result)').forEach((item) => {
+    list.querySelectorAll('.chat-item').forEach((item) => {
       item.addEventListener('click', () => {
         this.openChat(Number((item as HTMLElement).dataset.chatId));
       });
-    });
-
-    list.querySelectorAll('.search-result').forEach((item) => {
-      item.addEventListener('click', () => {
-        const chatId = Number((item as HTMLElement).dataset.chatId);
-        const msgId = Number((item as HTMLElement).dataset.msgId);
-        this.openChatAtMessage(chatId, msgId);
-      });
-    });
-  }
-
-  private openChatAtMessage(chatId: number, msgId: number): void {
-    this.openChat(chatId);
-
-    // Ждём один кадр — сообщения рендерятся синхронно, но DOM обновляется асинхронно
-    requestAnimationFrame(() => {
-      const msgEl = this.element.querySelector<HTMLElement>(`[data-msg-id="${msgId}"]`);
-      if (!msgEl) {
-        return;
-      }
-      msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      msgEl.classList.add('message--found');
-      setTimeout(() => msgEl.classList.remove('message--found'), 2500);
     });
   }
 

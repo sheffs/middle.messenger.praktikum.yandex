@@ -26,11 +26,11 @@ function userToFields(user: User): Array<{ name: string; label: string; value: s
 const template = `
   <div class="profile-page">
     <aside class="profile-page__sidebar">
-      <a href="/messenger" class="profile-page__back" data-link aria-label="Назад к чатам">
+      <button class="profile-page__back" id="back-btn" type="button" aria-label="Назад к чатам">
         <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true">
           <path d="M19 12H5M5 12L12 19M5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-      </a>
+      </button>
     </aside>
 
     <div class="profile-page__content">
@@ -100,10 +100,10 @@ const template = `
 `;
 
 export class ProfilePage extends Block {
-  private _editInputs!: Record<string, Input>;
-  private _pwdOld!: Input;
-  private _pwdNew!: Input;
-  private _pwdConfirm!: Input;
+  private declare _editInputs: Record<string, Input>;
+  private declare _pwdOld: Input;
+  private declare _pwdNew: Input;
+  private declare _pwdConfirm: Input;
 
   protected init(): void {
     const user = Store.getInstance().getState().user;
@@ -160,6 +160,9 @@ export class ProfilePage extends Block {
   }
 
   public componentDidMount(): void {
+    this.element.querySelector('#back-btn')?.addEventListener('click', () => {
+      Router.getInstance().back('/messenger');
+    });
     this._bindModalTriggers();
     this._bindEditForm();
     this._bindPasswordForm();
@@ -179,7 +182,9 @@ export class ProfilePage extends Block {
         .then((user) => {
           Store.getInstance().setState({ user });
         })
-        .catch(() => {/* silent */});
+        .catch((err: Error) => {
+          alert(`Не удалось загрузить аватар: ${err.message}`);
+        });
     });
     fileInput.click();
   }
@@ -222,18 +227,15 @@ export class ProfilePage extends Block {
         phone: this._editInputs.editPhone.getValue(),
       };
 
-      // eslint-disable-next-line no-console
-      console.log('Profile form data:', data);
-
       UsersAPI.updateProfile(data)
         .then((user) => {
           Store.getInstance().setState({ user });
           this.element.querySelector<HTMLElement>('#edit-profile-modal')?.setAttribute('hidden', '');
         })
-        .catch((err: { reason?: string }) => {
+        .catch((err: Error) => {
           const el = this.element.querySelector('#edit-error');
           if (el) {
-            el.textContent = err?.reason ?? 'Ошибка обновления данных';
+            el.textContent = err.message;
             el.removeAttribute('hidden');
           }
         });
@@ -253,17 +255,14 @@ export class ProfilePage extends Block {
         newPassword: this._pwdNew.getValue(),
       };
 
-      // eslint-disable-next-line no-console
-      console.log('Password form data:', pwdData);
-
       UsersAPI.updatePassword(pwdData)
         .then(() => {
           this.element.querySelector<HTMLElement>('#change-password-modal')?.setAttribute('hidden', '');
         })
-        .catch((err: { reason?: string }) => {
+        .catch((err: Error) => {
           const el = this.element.querySelector('#pwd-error');
           if (el) {
-            el.textContent = err?.reason ?? 'Ошибка смены пароля';
+            el.textContent = err.message;
             el.removeAttribute('hidden');
           }
         });
@@ -273,11 +272,10 @@ export class ProfilePage extends Block {
   private _bindLogout(): void {
     this.element.querySelector('#logout-btn')?.addEventListener('click', () => {
       AuthAPI.logout()
-        .then(() => {
+        .finally(() => {
           Store.getInstance().setState({ user: null, chats: [], activeChat: null });
           Router.getInstance().navigate('/');
-        })
-        .catch(() => {/* silent */});
+        });
     });
   }
 }

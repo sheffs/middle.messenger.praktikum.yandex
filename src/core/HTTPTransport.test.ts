@@ -72,27 +72,27 @@ describe('HTTPTransport', () => {
     expect(mockXHR.send).toHaveBeenCalledWith(JSON.stringify({ login: 'user', password: 'pass' }));
   });
 
-  it('отклоняет промис при статусе >= 400', async () => {
+  it('отклоняет промис с UnauthorizedError при статусе 401', async () => {
     const http = new HTTPTransport('/api');
     const promise = http.get<unknown>('/fail');
     mockXHR.status = 401;
     mockXHR.responseText = '{"reason":"Unauthorised"}';
     mockXHR.onload?.();
-    await expect(promise).rejects.toMatchObject({ reason: 'Unauthorised' });
+    await expect(promise).rejects.toMatchObject({ name: 'UnauthorizedError', status: 401, message: 'Unauthorised' });
   });
 
-  it('отклоняет промис при сетевой ошибке', async () => {
+  it('отклоняет промис с NetworkError при сетевой ошибке', async () => {
     const http = new HTTPTransport('/api');
     const promise = http.get<unknown>('/err');
     mockXHR.onerror?.();
-    await expect(promise).rejects.toMatchObject({ reason: 'Network error' });
+    await expect(promise).rejects.toMatchObject({ name: 'NetworkError' });
   });
 
-  it('отклоняет промис по таймауту', async () => {
+  it('отклоняет промис с TimeoutError по таймауту', async () => {
     const http = new HTTPTransport('/api');
     const promise = http.get<unknown>('/slow');
     mockXHR.ontimeout?.();
-    await expect(promise).rejects.toMatchObject({ reason: 'Request timeout' });
+    await expect(promise).rejects.toMatchObject({ name: 'TimeoutError' });
   });
 
   it('устанавливает withCredentials = true', async () => {

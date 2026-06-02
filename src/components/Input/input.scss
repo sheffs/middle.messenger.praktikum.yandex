@@ -44,6 +44,12 @@
     }
   }
 
+  &__hint {
+    font-size: $font-size-xs;
+    color: $text-secondary;
+    display: block;
+  }
+
   &__error-text {
     font-size: $font-size-xs;
     color: $error;

@@ -33,6 +33,7 @@
     "handlebars": "4.7.9"
   },
   "devDependencies": {
+    "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "7.18.0",
     "@typescript-eslint/parser": "7.18.0",
     "@vitest/coverage-v8": "4.1.6",
@@ -45,6 +46,7 @@
     "stylelint-config-standard-scss": "13.1.0",
     "typescript": "5.9.3",
     "vite": "7.3.3",
-    "vitest": "4.1.6"
+    "vitest": "4.1.6",
+    "ws": "^8.21.0"
   }
 }

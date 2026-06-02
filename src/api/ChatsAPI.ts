@@ -1,49 +1,42 @@
-import { LocalChatsService } from '../services/LocalChatsService';
-import type { Chat, User } from '../types';
+import HTTPTransport from '../core/HTTPTransport';
+import type { Chat, ChatMember } from '../types';
+
+const http = new HTTPTransport('/chats');
 
 export const ChatsAPI = {
   getChats(): Promise<Chat[]> {
-    return LocalChatsService.getChats();
+    return http.get('');
   },
 
-  createChat(data: { title: string; isGroup?: boolean; members?: number[] }): Promise<{ id: number }> {
-    return LocalChatsService.createChat(data.title, data.isGroup, data.members);
+  createChat(data: { title: string }): Promise<{ id: number }> {
+    return http.post('', { data });
   },
 
   deleteChat(chatId: number): Promise<void> {
-    return LocalChatsService.deleteChat(chatId);
+    return http.delete('', { data: { chatId } });
   },
 
-  getMembers(chatId: number): number[] {
-    return LocalChatsService.getMembers(chatId);
+  getMembers(chatId: number): Promise<ChatMember[]> {
+    return http.get(`/${chatId}/users`);
   },
 
-  addMember(chatId: number, userId: number): void {
-    LocalChatsService.addMember(chatId, userId);
+  addUsers(data: { users: number[]; chatId: number }): Promise<void> {
+    return http.put('/users', { data });
   },
 
-  removeMember(chatId: number, userId: number): void {
-    LocalChatsService.removeMember(chatId, userId);
+  removeUsers(data: { users: number[]; chatId: number }): Promise<void> {
+    return http.delete('/users', { data });
   },
 
-  updateChatAvatar(chatId: number, avatarSrc: string): void {
-    LocalChatsService.updateChatAvatar(chatId, avatarSrc);
+  updateAvatar(formData: FormData): Promise<Chat> {
+    return http.put('/avatar', { data: formData });
   },
 
-  updateLastMessage(chatId: number, content: string, user: User): void {
-    LocalChatsService.updateLastMessage(chatId, content, user);
+  getNewMessagesCount(chatId: number): Promise<{ unread_count: number }> {
+    return http.get(`/new/${chatId}`);
   },
 
-  // Заглушки для совместимости с интерфейсом реального API
-  addUsers(_data: { users: number[]; chatId: number }): Promise<void> {
-    return Promise.resolve();
-  },
-
-  removeUsers(_data: { users: number[]; chatId: number }): Promise<void> {
-    return Promise.resolve();
-  },
-
-  getChatToken(_chatId: number): Promise<{ token: string }> {
-    return Promise.resolve({ token: 'local' });
+  getChatToken(chatId: number): Promise<{ token: string }> {
+    return http.post(`/token/${chatId}`);
   },
 };

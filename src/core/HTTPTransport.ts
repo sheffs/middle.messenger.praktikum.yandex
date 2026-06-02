@@ -1,3 +1,13 @@
+import {
+  APIError,
+  UnauthorizedError,
+  ForbiddenError,
+  NotFoundError,
+  ServerError,
+  NetworkError,
+  TimeoutError,
+} from './errors';
+
 export enum Method {
   GET = 'GET',
   POST = 'POST',
@@ -6,7 +16,7 @@ export enum Method {
   PATCH = 'PATCH',
 }
 
-type RequestData = Record<string, unknown> | FormData;
+type RequestData = object | FormData;
 
 interface RequestOptions {
   method?: Method;
@@ -17,10 +27,18 @@ interface RequestOptions {
 
 const BASE_URL = 'https://ya-praktikum.tech/api/v2';
 
-function buildQuery(data: Record<string, unknown>): string {
+function buildQuery(data: object): string {
   return Object.entries(data)
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v as unknown))}`)
     .join('&');
+}
+
+function parseReason(responseText: string): string {
+  try {
+    return (JSON.parse(responseText) as { reason?: string }).reason ?? responseText;
+  } catch {
+    return responseText;
+  }
 }
 
 export default class HTTPTransport {
@@ -53,7 +71,7 @@ export default class HTTPTransport {
 
     let url = `${BASE_URL}${this._prefix}${path}`;
     if (isGet && data && !isFormData) {
-      url += `?${buildQuery(data as Record<string, unknown>)}`;
+      url += `?${buildQuery(data)}`;
     }
 
     return new Promise<T>((resolve, reject) => {
@@ -76,17 +94,20 @@ export default class HTTPTransport {
           } catch {
             resolve(xhr.responseText as unknown as T);
           }
-        } else {
-          try {
-            reject(JSON.parse(xhr.responseText) as unknown);
-          } catch {
-            reject({ reason: xhr.responseText });
-          }
+          return;
         }
+
+        const message = parseReason(xhr.responseText);
+
+        if (xhr.status === 401) { reject(new UnauthorizedError(message)); }
+        else if (xhr.status === 403) { reject(new ForbiddenError(message)); }
+        else if (xhr.status === 404) { reject(new NotFoundError(message)); }
+        else if (xhr.status >= 500) { reject(new ServerError(message)); }
+        else { reject(new APIError(xhr.status, message)); }
       };
 
-      xhr.onerror = (): void => reject({ reason: 'Network error' });
-      xhr.ontimeout = (): void => reject({ reason: 'Request timeout' });
+      xhr.onerror = (): void => reject(new NetworkError());
+      xhr.ontimeout = (): void => reject(new TimeoutError());
 
       if (isGet || !data) {
         xhr.send();

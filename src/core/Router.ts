@@ -1,4 +1,5 @@
 import Block from './Block';
+import { Stack } from '../utils/structures';
 
 type RouteFactory = () => Block;
 
@@ -16,6 +17,7 @@ export default class Router {
   private _notFoundFactory: RouteFactory | null = null;
   private _rootQuery: string;
   private _currentBlock: Block | null = null;
+  private _history: Stack<string> = new Stack();
 
   private constructor(rootQuery: string) {
     this._rootQuery = rootQuery;
@@ -39,7 +41,7 @@ export default class Router {
   private _bindLinks(): void {
     document.addEventListener('click', (e: MouseEvent) => {
       const target = (e.target as Element).closest('[data-link]');
-      if (!target) {return;}
+      if (!target) { return; }
       e.preventDefault();
       const href = target.getAttribute('href');
       if (href) {
@@ -59,9 +61,20 @@ export default class Router {
   }
 
   public navigate(path: string): void {
-    if (window.location.pathname === path) {return;}
+    if (window.location.pathname === path) { return; }
+    this._history.push(window.location.pathname);
     window.history.pushState({}, '', path);
     this._handleRoute(path);
+  }
+
+  /** Переход назад по собственному стеку истории; при пустом стеке — на fallback */
+  public back(fallback = '/'): void {
+    const prev = this._history.pop();
+    if (prev) {
+      window.history.back();
+    } else {
+      this.navigate(fallback);
+    }
   }
 
   public start(): void {
@@ -85,9 +98,9 @@ export default class Router {
   }
 
   private _mount(block: Block | null): void {
-    if (!block) {return;}
+    if (!block) { return; }
     const root = document.querySelector(this._rootQuery);
-    if (!root) {return;}
+    if (!root) { return; }
 
     root.innerHTML = '';
     root.appendChild(block.getContent());
