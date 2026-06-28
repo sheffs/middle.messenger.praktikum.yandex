@@ -1,0 +1,21 @@
+@use "reset";
+@use "mixins" as *;
+
+// Global utility classes
+.sr-only {
+  @include sr-only;
+}
+
+.form-error {
+  font-size: $font-size-sm;
+  color: $error;
+  background: rgb(239 68 68 / 8%);
+  border: 1px solid rgb(239 68 68 / 25%);
+  border-radius: $radius-md;
+  padding: $spacing-sm $spacing-md;
+  text-align: center;
+}
+
+#app {
+  min-height: 100vh;
+}
