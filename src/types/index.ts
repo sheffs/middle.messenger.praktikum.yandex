@@ -73,6 +73,12 @@ export interface ChatMember extends User {
   role: 'admin' | 'regular';
 }
 
+// Данные для добавления/удаления участников чата
+export interface ChatUsersData {
+  users: number[];
+  chatId: number;
+}
+
 export interface APIError {
   reason: string;
 }

@@ -1,5 +1,5 @@
 import HTTPTransport from '../core/HTTPTransport';
-import type { Chat, ChatMember } from '../types';
+import type { Chat, ChatMember, ChatUsersData } from '../types';
 
 const http = new HTTPTransport('/chats');
 
@@ -20,11 +20,11 @@ export const ChatsAPI = {
     return http.get(`/${chatId}/users`);
   },
 
-  addUsers(data: { users: number[]; chatId: number }): Promise<void> {
+  addUsers(data: ChatUsersData): Promise<void> {
     return http.put('/users', { data });
   },
 
-  removeUsers(data: { users: number[]; chatId: number }): Promise<void> {
+  removeUsers(data: ChatUsersData): Promise<void> {
     return http.delete('/users', { data });
   },
 

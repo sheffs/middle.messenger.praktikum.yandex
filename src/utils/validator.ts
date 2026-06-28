@@ -12,8 +12,20 @@ function makeRequired(label: string): ValidateRule {
   return (value) => (value.trim() ? null : `${label} обязательно`);
 }
 
-export const Validator = {
-  login(value: string): string | null {
+// Сигнатура валидаторов задаётся один раз через ValidateRule — типы аргумента
+// и результата не дублируются в каждом методе.
+interface ValidatorMap {
+  login: ValidateRule;
+  password: ValidateRule;
+  name: ValidateRule;
+  email: ValidateRule;
+  phone: ValidateRule;
+  displayName: ValidateRule;
+  passwordConfirm: (original: string) => ValidateRule;
+}
+
+export const Validator: ValidatorMap = {
+  login: (value) => {
     const required = makeRequired('Логин')(value);
     if (required) {return required;}
     if (!RULES.login.test(value)) {
@@ -22,7 +34,7 @@ export const Validator = {
     return null;
   },
 
-  password(value: string): string | null {
+  password: (value) => {
     const required = makeRequired('Пароль')(value);
     if (required) {return required;}
     if (!RULES.password.test(value)) {
@@ -31,7 +43,7 @@ export const Validator = {
     return null;
   },
 
-  name(value: string): string | null {
+  name: (value) => {
     const required = makeRequired('Поле')(value);
     if (required) {return required;}
     if (!RULES.name.test(value)) {
@@ -40,7 +52,7 @@ export const Validator = {
     return null;
   },
 
-  email(value: string): string | null {
+  email: (value) => {
     const required = makeRequired('Почта')(value);
     if (required) {return required;}
     if (!RULES.email.test(value)) {
@@ -49,7 +61,7 @@ export const Validator = {
     return null;
   },
 
-  phone(value: string): string | null {
+  phone: (value) => {
     const required = makeRequired('Телефон')(value);
     if (required) {return required;}
     if (!RULES.phone.test(value)) {
@@ -58,7 +70,7 @@ export const Validator = {
     return null;
   },
 
-  displayName(value: string): string | null {
+  displayName: (value) => {
     if (!value.trim()) {return null;}
     if (value.trim().length < 2 || value.trim().length > 30) {
       return 'От 2 до 30 символов';
@@ -66,11 +78,9 @@ export const Validator = {
     return null;
   },
 
-  passwordConfirm(original: string): ValidateRule {
-    return (value) => {
-      if (!value.trim()) {return 'Повторите пароль';}
-      if (value !== original) {return 'Пароли не совпадают';}
-      return null;
-    };
+  passwordConfirm: (original) => (value) => {
+    if (!value.trim()) {return 'Повторите пароль';}
+    if (value !== original) {return 'Пароли не совпадают';}
+    return null;
   },
-} as const;
+};
